@@ -6,8 +6,14 @@ import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.location.Location;
+import android.media.AudioManager;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.media.ToneGenerator;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -39,6 +45,8 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.DateFormat;
 import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class Journey extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, com.google.android.gms.location.LocationListener {
 
@@ -48,6 +56,13 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     private LocationRequest mLocationRequest;
     Location mCurrentLocation;
     String API = "AIzaSyDTn1RCzQ9EnrZhtJFONmWrO0V1DeMTOso";
+    static int LOCATION_REFRESH_TIME_SECONDS = 10;
+    static int DESTINATION_CLOSE_METRES = 1000;
+
+    final ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
+    final Handler h = new Handler();
+    int delay = 10000; //milliseconds
+    Runnable r;
 
     final static String LOCATION_KEY = "location-key";
     final static String LAST_UPDATED_TIME_STRING_KEY = "last-updated-time-string-key";
@@ -59,6 +74,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     TextView dAddTextView;
     TextView dLonTextView;
     TextView dLatTextView;
+    TextView refreshTime;
 
     String cLatitudeLabel;
     String cLongitudeLabel;
@@ -71,6 +87,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     String destLat;
     String destLon;
     int distToDest;
+    int prevDist;
     String mLastUpdateTime;
 
     @Override
@@ -87,6 +104,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         dAddTextView = (TextView) findViewById(R.id.dAddress);
         distanceTextView = (TextView) findViewById(R.id.distance);
         refreshTextView = (TextView) findViewById(R.id.refreshTextView);
+        refreshTime = (TextView) findViewById(R.id.refreshTime);
 
         cLatitudeLabel = getResources().getString(R.string.current_latitude);
         cLongitudeLabel = getResources().getString(R.string.current_longitude);
@@ -108,8 +126,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
         mLastUpdateTime = "";
 
-        updateValuesFromBundle(savedInstanceState);
-
         //Get current location information
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(this)
@@ -119,8 +135,10 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
         mLocationRequest = LocationRequest.create()
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
-                .setInterval(10 * 1000)        // 10 seconds, in milliseconds
-                .setFastestInterval(10 * 1000); // 10 second, in milliseconds
+                .setInterval(LOCATION_REFRESH_TIME_SECONDS * 1000)        // in milliseconds
+                .setFastestInterval(LOCATION_REFRESH_TIME_SECONDS * 1000); // in milliseconds
+
+        playAudio();
     }
 
     @Override
@@ -143,18 +161,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         }
 
         return super.onOptionsItemSelected(item);
-    }
-
-    private void updateValuesFromBundle(Bundle savedInstanceState) {
-        if (savedInstanceState != null) {
-            if (savedInstanceState.keySet().contains(LOCATION_KEY)) {
-                mCurrentLocation = savedInstanceState.getParcelable(LOCATION_KEY);
-            }
-            if (savedInstanceState.keySet().contains(LAST_UPDATED_TIME_STRING_KEY)) {
-                mLastUpdateTime = savedInstanceState.getString(LAST_UPDATED_TIME_STRING_KEY);
-            }
-            updateUI();
-        }
     }
 
     private void startLocationUpdates() {
@@ -180,9 +186,10 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         if (distToDest == 0){
             distanceTextView.setText(String.format("%s %s", distanceLabel, "Calculating distance"));
         } else {
-            distanceTextView.setText(String.format("%s %s %s", distanceLabel, distToDest / 1000, "kilometres"));
+            distanceTextView.setText(String.format("%s %s %s", distanceLabel, distToDest, "metres"));
         }
         refreshTextView.setText(String.format("%s %s", refreshLabel, mLastUpdateTime));
+        refreshTime.setText(String.format("%s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS));
     }
 
     @Override
@@ -259,9 +266,59 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         Log.d(TAG, location.toString());
         mCurrentLocation = location;
         mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
+        if (distToDest < DESTINATION_CLOSE_METRES && distToDest!=0){
+            LOCATION_REFRESH_TIME_SECONDS = 5;
+            locationClose();
+            playAudio();
+        } else {
+            LOCATION_REFRESH_TIME_SECONDS = 10;
+            delay = 10000;
+            locationFar();
+        }
         updateUI();
 
         new DistanceTask().execute();
+    }
+
+    private void locationClose() {
+
+        if (distToDest > (DESTINATION_CLOSE_METRES*4)/5 ){
+            delay = 5000;
+        } else if (distToDest <= (DESTINATION_CLOSE_METRES*4)/5 && distToDest > (DESTINATION_CLOSE_METRES*3)/5){
+            delay = 2500;
+        } else if (distToDest <= (DESTINATION_CLOSE_METRES*3)/5 && distToDest > (DESTINATION_CLOSE_METRES*2)/5){
+            delay = 1000;
+        } else if (distToDest <= (DESTINATION_CLOSE_METRES*2)/5 && distToDest > (DESTINATION_CLOSE_METRES*1)/5){
+            delay = 500;
+        } else {
+            delay = 250;
+        }
+
+    }
+
+    private void locationFar() {
+        if(prevDist > distToDest){
+            playAudio();
+        } else {
+            stopAudio();
+        }
+    }
+
+    private void playAudio(){
+
+        r = new Runnable(){
+            public void run(){
+                toneGen1.startTone(ToneGenerator.TONE_CDMA_PIP, 150);
+                h.postDelayed(this, delay);
+            }
+        };
+
+        h.postDelayed(r, delay);
+    }
+
+    private void stopAudio(){
+        h.removeCallbacks(r);
+        //toneGen1.stopTone();
     }
 
     @Override
@@ -273,13 +330,8 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         }
     }
 
-    public void onSaveInstanceState(Bundle savedInstanceState) {
-        savedInstanceState.putParcelable(LOCATION_KEY, mCurrentLocation);
-        savedInstanceState.putString(LAST_UPDATED_TIME_STRING_KEY, mLastUpdateTime);
-        super.onSaveInstanceState(savedInstanceState);
-    }
-
     public void goBack(View view) {
+        stopAudio();
         Intent intent = new Intent(this, Destination.class);
         startActivity(intent);
     }
@@ -332,9 +384,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
             JSONObject distance = elements.getJSONObject(0).getJSONObject("distance");
             dist = distance.getInt("value");
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (JSONException e) {
+        } catch (IOException | JSONException e) {
             e.printStackTrace();
         }
         return dist;
@@ -343,6 +393,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     private class DistanceTask extends AsyncTask<Void,Void,Void> {
         protected Void doInBackground(Void... params) {
             try {
+                prevDist = distToDest;
                 distToDest = getDistance();
             } catch (IOException e) {
                 e.printStackTrace();
