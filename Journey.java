@@ -21,6 +21,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -57,7 +58,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     Location mCurrentLocation;
     String API = "AIzaSyDTn1RCzQ9EnrZhtJFONmWrO0V1DeMTOso";
     static int LOCATION_REFRESH_TIME_SECONDS = 10;
-    static int DESTINATION_CLOSE_METRES = 1000;
+    static int DESTINATION_CLOSE_METRES = 300;
 
     final ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
     final Handler h = new Handler();
@@ -94,6 +95,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_journey);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
@@ -189,7 +191,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
             distanceTextView.setText(String.format("%s %s %s", distanceLabel, distToDest, "metres"));
         }
         refreshTextView.setText(String.format("%s %s", refreshLabel, mLastUpdateTime));
-        refreshTime.setText(String.format("%s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS));
+        refreshTime.setText(String.format("%s %s %s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS, "Delay", delay));
     }
 
     @Override
@@ -269,7 +271,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         if (distToDest < DESTINATION_CLOSE_METRES && distToDest!=0){
             LOCATION_REFRESH_TIME_SECONDS = 5;
             locationClose();
-            playAudio();
         } else {
             LOCATION_REFRESH_TIME_SECONDS = 10;
             delay = 10000;
@@ -293,21 +294,21 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         } else {
             delay = 250;
         }
-
     }
 
     private void locationFar() {
-        if(prevDist > distToDest){
-            playAudio();
+
+        if(prevDist > distToDest && prevDist != 0){
+            //keep playing audio
         } else {
-            stopAudio();
+            //stopAudio();
         }
     }
 
     private void playAudio(){
 
-        r = new Runnable(){
-            public void run(){
+        r = new Runnable() {
+            public void run() {
                 toneGen1.startTone(ToneGenerator.TONE_CDMA_PIP, 150);
                 h.postDelayed(this, delay);
             }
