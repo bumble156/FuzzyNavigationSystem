@@ -18,6 +18,7 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -36,6 +37,8 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.text.DateFormat;
+import java.util.Date;
 
 public class Journey extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, com.google.android.gms.location.LocationListener {
 
@@ -43,13 +46,32 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     public static final String TAG = Journey.class.getSimpleName();
     private final static int CONNECTION_FAILURE_RESOLUTION_REQUEST = 9000;
     private LocationRequest mLocationRequest;
+    Location mCurrentLocation;
     String API = "AIzaSyDTn1RCzQ9EnrZhtJFONmWrO0V1DeMTOso";
 
-    String currentLat;
-    String currentLon;
+    final static String LOCATION_KEY = "location-key";
+    final static String LAST_UPDATED_TIME_STRING_KEY = "last-updated-time-string-key";
+
+    TextView refreshTextView;
+    TextView distanceTextView;
+    TextView cLatTextView;
+    TextView cLonTextView;
+    TextView dAddTextView;
+    TextView dLonTextView;
+    TextView dLatTextView;
+
+    String cLatitudeLabel;
+    String cLongitudeLabel;
+    String dLatitudeLabel;
+    String dLongitudeLabel;
+    String dAddressLabel;
+    String distanceLabel;
+    String refreshLabel;
+
     String destLat;
     String destLon;
     int distToDest;
+    String mLastUpdateTime;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,18 +80,35 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        cLatTextView = (TextView) findViewById(R.id.cLatitude);
+        cLonTextView = (TextView) findViewById(R.id.cLongitude);
+        dLatTextView = (TextView) findViewById(R.id.dLatitude);
+        dLonTextView = (TextView) findViewById(R.id.dLongitude);
+        dAddTextView = (TextView) findViewById(R.id.dAddress);
+        distanceTextView = (TextView) findViewById(R.id.distance);
+        refreshTextView = (TextView) findViewById(R.id.refreshTextView);
+
+        cLatitudeLabel = getResources().getString(R.string.current_latitude);
+        cLongitudeLabel = getResources().getString(R.string.current_longitude);
+        dLatitudeLabel = getResources().getString(R.string.destination_latitude);
+        dLongitudeLabel = getResources().getString(R.string.destination_longitude);
+        dAddressLabel = getResources().getString(R.string.destination_address);
+        distanceLabel = getResources().getString(R.string.distance);
+        refreshLabel = getResources().getString(R.string.refresh_time);
+
         //Pass in destination information
         Intent intent = getIntent();
         destLat = intent.getStringExtra(Destination.EXTRA_LAT);
         destLon = intent.getStringExtra(Destination.EXTRA_LON);
         String destAdd = intent.getStringExtra(Destination.EXTRA_ADD);
 
-        TextView dLatTextView = (TextView) findViewById(R.id.dLatTextView);
-        dLatTextView.append(" " + destLat);
-        TextView dLonTextView = (TextView) findViewById(R.id.dLonTextView);
-        dLonTextView.append(" " + destLon);
-        TextView dAddTextView = (TextView) findViewById(R.id.dAddTextView);
-        dAddTextView.append(" " + destAdd);
+        dLatTextView.setText(String.format("%s %s", dLatitudeLabel, destLat));
+        dLonTextView.setText(String.format("%s %s", dLongitudeLabel, destLon));
+        dAddTextView.setText(String.format("%s %s", dAddressLabel, destAdd));
+
+        mLastUpdateTime = "";
+
+        updateValuesFromBundle(savedInstanceState);
 
         //Get current location information
         mGoogleApiClient = new GoogleApiClient.Builder(this)
@@ -82,8 +121,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
                 .setInterval(10 * 1000)        // 10 seconds, in milliseconds
                 .setFastestInterval(10 * 1000); // 10 second, in milliseconds
-
-        mGoogleApiClient.connect();
     }
 
     @Override
@@ -108,25 +145,21 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         return super.onOptionsItemSelected(item);
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        mGoogleApiClient.connect();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if (mGoogleApiClient.isConnected()) {
-            LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
-            mGoogleApiClient.disconnect();
+    private void updateValuesFromBundle(Bundle savedInstanceState) {
+        if (savedInstanceState != null) {
+            if (savedInstanceState.keySet().contains(LOCATION_KEY)) {
+                mCurrentLocation = savedInstanceState.getParcelable(LOCATION_KEY);
+            }
+            if (savedInstanceState.keySet().contains(LAST_UPDATED_TIME_STRING_KEY)) {
+                mLastUpdateTime = savedInstanceState.getString(LAST_UPDATED_TIME_STRING_KEY);
+            }
+            updateUI();
         }
     }
 
-    @Override
-    public void onConnected(Bundle bundle) {
-        Log.i(TAG, "Location services connected.");
-
+    private void startLocationUpdates() {
+        // The final argument to {@code requestLocationUpdates()} is a LocationListener
+        // (http://developer.android.com/reference/com/google/android/gms/location/LocationListener.html).
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // TODO: Consider calling
             //    ActivityCompat#requestPermissions
@@ -137,19 +170,74 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
             // for ActivityCompat#requestPermissions for more details.
             return;
         }
-        Location location = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+        LocationServices.FusedLocationApi.requestLocationUpdates(
+                mGoogleApiClient, mLocationRequest, this);
+    }
 
-        if (location == null) {
-            LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
+    private void updateUI() {
+        cLatTextView.setText(String.format("%s %f", cLatitudeLabel, mCurrentLocation.getLatitude()));
+        cLonTextView.setText(String.format("%s %f", cLongitudeLabel, mCurrentLocation.getLongitude()));
+        if (distToDest == 0){
+            distanceTextView.setText(String.format("%s %s", distanceLabel, "Calculating distance"));
+        } else {
+            distanceTextView.setText(String.format("%s %s %s", distanceLabel, distToDest / 1000, "kilometres"));
         }
-        else {
-            handleNewLocation(location);
-        };
+        refreshTextView.setText(String.format("%s %s", refreshLabel, mLastUpdateTime));
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        mGoogleApiClient.connect();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mGoogleApiClient.isConnected()) {
+            startLocationUpdates();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (mGoogleApiClient.isConnected()) {
+            LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        mGoogleApiClient.disconnect();
+        super.onStop();
+    }
+
+    @Override
+    public void onConnected(Bundle bundle) {
+        if (mCurrentLocation == null) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
+            }
+            mCurrentLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+            mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
+            updateUI();
+        }
+
+        startLocationUpdates();
     }
 
     @Override
     public void onConnectionSuspended(int i) {
-        Log.i(TAG, "Location services suspended. Please reconnect.");
+        Log.i(TAG, "Connection suspended");
+        mGoogleApiClient.connect();
     }
 
     @Override
@@ -166,29 +254,29 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         }
     }
 
-    private void handleNewLocation(Location location) {
+    private void handleNewLocation(Location location) throws IOException {
 
         Log.d(TAG, location.toString());
-        double currentLatitude = location.getLatitude();
-        double currentLongitude = location.getLongitude();
-
-        currentLat = String.valueOf(currentLatitude);
-        currentLon = String.valueOf(currentLongitude);
-
-        TextView cLatTextView = (TextView) findViewById(R.id.cLatTextView);
-        cLatTextView.append(" " + currentLat);
-        TextView cLonTextView = (TextView) findViewById(R.id.cLonTextView);
-        cLonTextView.append(" " + currentLon);
+        mCurrentLocation = location;
+        mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
+        updateUI();
 
         new DistanceTask().execute();
-
-        TextView distanceTextView = (TextView) findViewById(R.id.distanceTextView);
-        distanceTextView.append(" " + distToDest);
     }
 
     @Override
     public void onLocationChanged(Location location) {
-        handleNewLocation(location);
+        try {
+            handleNewLocation(location);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void onSaveInstanceState(Bundle savedInstanceState) {
+        savedInstanceState.putParcelable(LOCATION_KEY, mCurrentLocation);
+        savedInstanceState.putString(LAST_UPDATED_TIME_STRING_KEY, mLastUpdateTime);
+        super.onSaveInstanceState(savedInstanceState);
     }
 
     public void goBack(View view) {
@@ -204,9 +292,9 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         StringBuilder urlString = new StringBuilder();
         urlString.append("https://maps.googleapis.com/maps/api/distancematrix/json?");
         urlString.append("origins=");//from
-        urlString.append(currentLat);
+        urlString.append(mCurrentLocation.getLatitude());
         urlString.append(",");
-        urlString.append(currentLon);
+        urlString.append(mCurrentLocation.getLongitude());
         urlString.append("&destinations=");//to
         urlString.append(destLat);
         urlString.append(",");
@@ -249,7 +337,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         } catch (JSONException e) {
             e.printStackTrace();
         }
-        System.out.println("Dist: " + dist);
         return dist;
     }
 
@@ -257,7 +344,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         protected Void doInBackground(Void... params) {
             try {
                 distToDest = getDistance();
-                System.out.println("DistToDest: " + distToDest);
             } catch (IOException e) {
                 e.printStackTrace();
             }
