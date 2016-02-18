@@ -38,7 +38,7 @@ public class Destination extends AppCompatActivity {
         EditText editText = (EditText) findViewById(R.id.edit_message);
         String message = editText.getText().toString();
 
-        if (Geocoder.isPresent()) {
+        if (geocoder.isPresent()) {
             List<Address> addresses = geocoder.getFromLocationName(message, 1);
             Address address = addresses.get(0);
             double latitude = address.getLatitude();
@@ -65,3 +65,4 @@ public class Destination extends AppCompatActivity {
     }
 
 }
+
