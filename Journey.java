@@ -4,16 +4,13 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.location.Location;
 import android.media.AudioManager;
-import android.media.Ringtone;
-import android.media.RingtoneManager;
 import android.media.ToneGenerator;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
+import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -22,10 +19,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.EditText;
-import android.widget.RelativeLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -35,47 +29,58 @@ import com.google.android.gms.location.LocationServices;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONTokener;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.DateFormat;
 import java.util.Date;
-import java.util.Timer;
-import java.util.TimerTask;
 
 public class Journey extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, com.google.android.gms.location.LocationListener {
 
+    //Backend stuff
+
     private GoogleApiClient mGoogleApiClient;
-    public static final String TAG = Journey.class.getSimpleName();
     private final static int CONNECTION_FAILURE_RESOLUTION_REQUEST = 9000;
-    private LocationRequest mLocationRequest;
-    Location mCurrentLocation;
     String API = "AIzaSyDTn1RCzQ9EnrZhtJFONmWrO0V1DeMTOso";
-    static int LOCATION_REFRESH_TIME_SECONDS = 10;
-    static int DESTINATION_CLOSE_METRES = 300;
 
-    final ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
+    //Location stuff
+
+    private LocationRequest mLocationRequest;
+    private Location mCurrentLocation;
+    String destLat; //Latitude of destination
+    String destLon; //Longitude of destination
+    int distToDest; //Distance to destination (meters)
+    int prevDist; //Distance to destination (meters) from previous location
+    String mLastUpdateTime; //Last time that location was updated
+
+    //Logging & intent stuff
+
+    public static final String TAG = Journey.class.getSimpleName();
+    public final static String EXTRA_NO_ROUTE = "com.lonsdale.fuzzynavigationsystem.EXTRA_NO_ROUTE";
+
+    //Audio stuff
+
+    final ToneGenerator toneGen1 = new ToneGenerator(AudioManager.STREAM_MUSIC, 100); //Audio data of beep
     final Handler h = new Handler();
-    int delay = 10000; //milliseconds
     Runnable r;
+    boolean isRunning; //Whether the audio track is currently playing or not
 
-    final static String LOCATION_KEY = "location-key";
-    final static String LAST_UPDATED_TIME_STRING_KEY = "last-updated-time-string-key";
+    //TextViews
 
-    TextView refreshTextView;
-    TextView distanceTextView;
     TextView cLatTextView;
     TextView cLonTextView;
-    TextView dAddTextView;
-    TextView dLonTextView;
     TextView dLatTextView;
+    TextView dLonTextView;
+    TextView dAddTextView;
+    TextView distanceTextView;
+    TextView refreshTextView;
     TextView refreshTime;
+
+    //Labels
 
     String cLatitudeLabel;
     String cLongitudeLabel;
@@ -85,20 +90,23 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     String distanceLabel;
     String refreshLabel;
 
-    String destLat;
-    String destLon;
-    int distToDest;
-    int prevDist;
-    String mLastUpdateTime;
+    //Variables
+
+    static int AUDIO_DELAY = 10000; //milliseconds
+    static int DESTINATION_CLOSE_METRES = 300; //How close the destination should be to be considered 'close'
+    static int LOCATION_REFRESH_TIME_SECONDS = 10; //How often location gets refreshed
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_journey);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        //Keeps screen on to avoid starting multiple audio threads when screen goes off
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        //Find all text views in the activity
         cLatTextView = (TextView) findViewById(R.id.cLatitude);
         cLonTextView = (TextView) findViewById(R.id.cLongitude);
         dLatTextView = (TextView) findViewById(R.id.dLatitude);
@@ -108,6 +116,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         refreshTextView = (TextView) findViewById(R.id.refreshTextView);
         refreshTime = (TextView) findViewById(R.id.refreshTime);
 
+        //Set labels for all text views in the activity
         cLatitudeLabel = getResources().getString(R.string.current_latitude);
         cLongitudeLabel = getResources().getString(R.string.current_longitude);
         dLatitudeLabel = getResources().getString(R.string.destination_latitude);
@@ -116,31 +125,34 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         distanceLabel = getResources().getString(R.string.distance);
         refreshLabel = getResources().getString(R.string.refresh_time);
 
-        //Pass in destination information
+        //Pass in destination information from intent
         Intent intent = getIntent();
         destLat = intent.getStringExtra(Destination.EXTRA_LAT);
         destLon = intent.getStringExtra(Destination.EXTRA_LON);
         String destAdd = intent.getStringExtra(Destination.EXTRA_ADD);
 
+        //Add destination information to activity once it has been found
         dLatTextView.setText(String.format("%s %s", dLatitudeLabel, destLat));
         dLonTextView.setText(String.format("%s %s", dLongitudeLabel, destLon));
         dAddTextView.setText(String.format("%s %s", dAddressLabel, destAdd));
 
+        //Set initial variables
         mLastUpdateTime = "";
+        isRunning = false;
 
         //Get current location information
+        //Set up new API client
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
                 .addApi(LocationServices.API)
                 .build();
 
+        //Create new location request
         mLocationRequest = LocationRequest.create()
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
                 .setInterval(LOCATION_REFRESH_TIME_SECONDS * 1000)        // in milliseconds
                 .setFastestInterval(LOCATION_REFRESH_TIME_SECONDS * 1000); // in milliseconds
-
-        playAudio();
     }
 
     @Override
@@ -166,32 +178,30 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     }
 
     private void startLocationUpdates() {
-        // The final argument to {@code requestLocationUpdates()} is a LocationListener
-        // (http://developer.android.com/reference/com/google/android/gms/location/LocationListener.html).
+        //Checks all permissions are set
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
+            //returns if no permissions
             return;
         }
+        //Requests location updates from the API client
         LocationServices.FusedLocationApi.requestLocationUpdates(
                 mGoogleApiClient, mLocationRequest, this);
     }
 
     private void updateUI() {
+        //Updates all text views in the UI
         cLatTextView.setText(String.format("%s %f", cLatitudeLabel, mCurrentLocation.getLatitude()));
         cLonTextView.setText(String.format("%s %f", cLongitudeLabel, mCurrentLocation.getLongitude()));
+
+        //Displays distance to destination when calculated
         if (distToDest == 0){
             distanceTextView.setText(String.format("%s %s", distanceLabel, "Calculating distance"));
         } else {
             distanceTextView.setText(String.format("%s %s %s", distanceLabel, distToDest, "metres"));
         }
+
         refreshTextView.setText(String.format("%s %s", refreshLabel, mLastUpdateTime));
-        refreshTime.setText(String.format("%s %s %s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS, "Delay", delay));
+        refreshTime.setText(String.format("%s %s %s %s %s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS, "Delay", AUDIO_DELAY, "Progress Made", isRunning));
     }
 
     @Override
@@ -225,16 +235,11 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     @Override
     public void onConnected(Bundle bundle) {
         if (mCurrentLocation == null) {
+            //Checks for permissions
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
                 return;
             }
+            //Gets initial location from phone
             mCurrentLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
             mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
             updateUI();
@@ -250,7 +255,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     }
 
     @Override
-    public void onConnectionFailed(ConnectionResult connectionResult) {
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
         if (connectionResult.hasResolution()) {
             try {
                 // Start an Activity that tries to resolve the error
@@ -265,61 +270,89 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
     private void handleNewLocation(Location location) throws IOException {
 
+        //Called when the current phone location is updated
+
         Log.d(TAG, location.toString());
+
+        //Setting current location
         mCurrentLocation = location;
         mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
+
+        //Checking whether location is 'close' to destination or 'far'
         if (distToDest < DESTINATION_CLOSE_METRES && distToDest!=0){
             LOCATION_REFRESH_TIME_SECONDS = 5;
             locationClose();
         } else {
-            LOCATION_REFRESH_TIME_SECONDS = 10;
-            delay = 10000;
-            locationFar();
+            if (distToDest != 0){
+                LOCATION_REFRESH_TIME_SECONDS = 10;
+                AUDIO_DELAY = 10000;
+                locationFar();
+            } else {
+                // log 'lost connection'
+            }
         }
         updateUI();
 
+        //Starts another task to calculate new distance from destination using newly found location
         new DistanceTask().execute();
     }
 
     private void locationClose() {
 
+        //Sets delay for audio to increase frequency of beep as destination nears
+
         if (distToDest > (DESTINATION_CLOSE_METRES*4)/5 ){
-            delay = 5000;
+            AUDIO_DELAY = 5000;
         } else if (distToDest <= (DESTINATION_CLOSE_METRES*4)/5 && distToDest > (DESTINATION_CLOSE_METRES*3)/5){
-            delay = 2500;
+            AUDIO_DELAY = 2500;
         } else if (distToDest <= (DESTINATION_CLOSE_METRES*3)/5 && distToDest > (DESTINATION_CLOSE_METRES*2)/5){
-            delay = 1000;
-        } else if (distToDest <= (DESTINATION_CLOSE_METRES*2)/5 && distToDest > (DESTINATION_CLOSE_METRES*1)/5){
-            delay = 500;
+            AUDIO_DELAY = 1000;
+        } else if (distToDest <= (DESTINATION_CLOSE_METRES*2)/5 && distToDest > (DESTINATION_CLOSE_METRES)/5){
+            AUDIO_DELAY = 500;
         } else {
-            delay = 250;
+            AUDIO_DELAY = 250;
+        }
+
+        //Starts audio track if it is not already playing (if destination starts off 'close')
+        if (!isRunning){
+            playAudio();
         }
     }
 
     private void locationFar() {
 
         if(prevDist > distToDest && prevDist != 0){
-            //keep playing audio
+            //if progress is being made on the journey keep playing audio
+            if (!isRunning){
+                playAudio();
+            }
         } else {
-            //stopAudio();
+            //no progress made, pause audio
+            if (isRunning){
+                stopAudio();
+            }
         }
     }
 
     private void playAudio(){
 
+        //Plays a single beeping sound
         r = new Runnable() {
             public void run() {
+                isRunning = true;
                 toneGen1.startTone(ToneGenerator.TONE_CDMA_PIP, 150);
-                h.postDelayed(this, delay);
+                h.postDelayed(this, AUDIO_DELAY);
             }
         };
 
-        h.postDelayed(r, delay);
+        //Recursively repeats beeping sound after a delay
+        h.postDelayed(r, AUDIO_DELAY);
     }
 
     private void stopAudio(){
+        //Stops the audio from playing
+        isRunning = false;
         h.removeCallbacks(r);
-        //toneGen1.stopTone();
     }
 
     @Override
@@ -332,9 +365,10 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     }
 
     public void goBack(View view) {
+        //Handles the user pressing the back button
         stopAudio();
-        Intent intent = new Intent(this, Destination.class);
-        startActivity(intent);
+        Intent backToDest = new Intent(this, Destination.class);
+        startActivity(backToDest);
     }
 
     private int getDistance() throws IOException {
@@ -355,10 +389,12 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         urlString.append("&key=");
         urlString.append(API);
 
-        HttpURLConnection urlConnection= null;
-        URL url = null;
+        HttpURLConnection urlConnection;
+        URL url;
 
+        //Attempt to calculate the distance between the current location and the destination using the previous URL
         try {
+            //Set up URL connection
             url = new URL(urlString.toString());
             urlConnection = (HttpURLConnection) url.openConnection();
             urlConnection.setRequestMethod("GET");
@@ -366,26 +402,36 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
             urlConnection.setDoInput(true);
             urlConnection.connect();
 
+            //Set up readers for response
             InputStream inStream = urlConnection.getInputStream();
             BufferedReader bReader = new BufferedReader(new InputStreamReader(inStream));
 
+            //Parse response from API as JSON
             String temp, response = "";
             while ((temp = bReader.readLine()) != null) {
-                //Parse data
                 response += temp;
             }
-            //Close the reader, stream & connection
+
+            //Close reader, stream & connection
             bReader.close();
             inStream.close();
             urlConnection.disconnect();
 
+            //Parse JSON to get distance of fastest route in meters
             JSONObject object = new JSONObject(response);
             JSONArray rows = object.getJSONArray("rows");
             JSONArray elements = rows.getJSONObject(0).getJSONArray("elements");
             JSONObject distance = elements.getJSONObject(0).getJSONObject("distance");
             dist = distance.getInt("value");
 
-        } catch (IOException | JSONException e) {
+        } catch (JSONException e) {
+            //If there is no route between points
+            e.printStackTrace();
+            //Send user back to Destination page and generate toast with information about problem
+            Intent noRoute = new Intent(this, Destination.class);
+            noRoute.putExtra(EXTRA_NO_ROUTE, getResources().getString(R.string.no_route_error));
+            startActivity(noRoute);
+        } catch (IOException e){
             e.printStackTrace();
         }
         return dist;
@@ -394,7 +440,11 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     private class DistanceTask extends AsyncTask<Void,Void,Void> {
         protected Void doInBackground(Void... params) {
             try {
-                prevDist = distToDest;
+                //Set distance from previous location to assess progress
+                if (distToDest != 0) {
+                    prevDist = distToDest;
+                }
+                //Set new distance from API call
                 distToDest = getDistance();
             } catch (IOException e) {
                 e.printStackTrace();
