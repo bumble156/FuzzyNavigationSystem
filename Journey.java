@@ -93,8 +93,9 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     //Variables
 
     static int AUDIO_DELAY = 10000; //milliseconds
-    static int DESTINATION_CLOSE_METRES = 300; //How close the destination should be to be considered 'close'
-    static int LOCATION_REFRESH_TIME_SECONDS = 10; //How often location gets refreshed
+    static int DESTINATION_CLOSE_METRES = 1000; //How close the destination should be to be considered 'close'
+    static int LOCATION_REFRESH_TIME_SECONDS = 5; //How often location gets refreshed
+    static int PROGRESS_TOLERANCE = 5; //Tolerance of positioning in metres
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -197,7 +198,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         if (distToDest == 0){
             distanceTextView.setText(String.format("%s %s", distanceLabel, "Calculating distance"));
         } else {
-            distanceTextView.setText(String.format("%s %s %s", distanceLabel, distToDest, "metres"));
+            distanceTextView.setText(String.format("%s %s %s %s %s", distanceLabel, distToDest, "metres", "Previous Distance: ", prevDist));
         }
 
         refreshTextView.setText(String.format("%s %s", refreshLabel, mLastUpdateTime));
@@ -212,6 +213,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
     @Override
     protected void onResume() {
+        playAudio();
         super.onResume();
         if (mGoogleApiClient.isConnected()) {
             startLocationUpdates();
@@ -220,6 +222,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
     @Override
     protected void onPause() {
+        stopAudio();
         super.onPause();
         if (mGoogleApiClient.isConnected()) {
             LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
@@ -274,17 +277,13 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
         Log.d(TAG, location.toString());
 
-        //Setting current location
-        mCurrentLocation = location;
-        mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
-
         //Checking whether location is 'close' to destination or 'far'
         if (distToDest < DESTINATION_CLOSE_METRES && distToDest!=0){
-            LOCATION_REFRESH_TIME_SECONDS = 5;
+            LOCATION_REFRESH_TIME_SECONDS = 2;
             locationClose();
         } else {
             if (distToDest != 0){
-                LOCATION_REFRESH_TIME_SECONDS = 10;
+                LOCATION_REFRESH_TIME_SECONDS = 5;
                 AUDIO_DELAY = 10000;
                 locationFar();
             } else {
@@ -292,9 +291,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
             }
         }
         updateUI();
-
-        //Starts another task to calculate new distance from destination using newly found location
-        new DistanceTask().execute();
     }
 
     private void locationClose() {
@@ -321,13 +317,14 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
     private void locationFar() {
 
-        if(prevDist > distToDest && prevDist != 0){
+        if(prevDist > (distToDest + PROGRESS_TOLERANCE) && prevDist != 0){
             //if progress is being made on the journey keep playing audio
             if (!isRunning){
                 playAudio();
             }
         } else {
             //no progress made, pause audio
+            System.out.println("No progress being made!");
             if (isRunning){
                 stopAudio();
             }
@@ -358,6 +355,13 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     @Override
     public void onLocationChanged(Location location) {
         try {
+            //Setting current location
+            mCurrentLocation = location;
+            mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
+
+            //Starts another task to calculate new distance from destination using newly found location
+            new DistanceTask().execute();
+
             handleNewLocation(location);
         } catch (IOException e) {
             e.printStackTrace();
