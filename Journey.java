@@ -54,7 +54,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     String destLat; //Latitude of destination
     String destLon; //Longitude of destination
     int distToDest = Integer.MAX_VALUE; //Distance to destination (meters)
-    int prevDist = Integer.MAX_VALUE;; //Distance to destination (meters) from previous location
     String mLastUpdateTime; //Last time that location was updated
     boolean arrived;
     int initDist = 0;
@@ -98,10 +97,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     static int AUDIO_DELAY = 10000; //milliseconds
     static int DESTINATION_CLOSE_METRES = 1000; //How close the destination should be to be considered 'close'
     static int LOCATION_REFRESH_TIME_SECONDS = 5; //How often location gets refreshed
-    static int PROGRESS_TOLERANCE = 5; //Tolerance of positioning in metres
     static int ARRIVED_DISTANCE = 50; //How close the vehicle has to be to the destination before it is considered to have arrived
-
-    int audioCounter = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -208,11 +204,11 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
             if (distToDest == Integer.MAX_VALUE) {
                 distanceTextView.setText(String.format("%s %s", distanceLabel, "Calculating distance"));
             } else {
-                distanceTextView.setText(String.format("%s %s %s %s %s", distanceLabel, distToDest, "metres", "Previous Distance: ", prevDist));
+                distanceTextView.setText(String.format("%s %s %s %s %s", distanceLabel, distToDest, "metres", "Initial distance", initDist));
             }
 
             refreshTextView.setText(String.format("%s %s", refreshLabel, mLastUpdateTime));
-            refreshTime.setText(String.format("%s %s %s %s %s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS, "Delay", AUDIO_DELAY, "Initial distance", initDist));
+            refreshTime.setText(String.format("%s %s %s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS, "Delay", AUDIO_DELAY));
         } else {
             cLatTextView.setText("");
             cLonTextView.setText("");
@@ -230,7 +226,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     protected void onStart() {
         super.onStart();
         mGoogleApiClient.connect();
-        //playAudio();
     }
 
     @Override
@@ -253,7 +248,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
     @Override
     protected void onStop() {
-        //stopAudio();
         mGoogleApiClient.disconnect();
         super.onStop();
     }
@@ -300,22 +294,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
         Log.d(TAG, location.toString());
 
-        //Checking whether location is 'close' to destination or 'far'
-//        if (distToDest <= ARRIVED_DISTANCE){
-//            endJourney();
-//        } else if (distToDest < DESTINATION_CLOSE_METRES && distToDest>ARRIVED_DISTANCE){
-//            LOCATION_REFRESH_TIME_SECONDS = 2;
-//            locationClose();
-//        }
-//        else {
-//            if (distToDest != Integer.MAX_VALUE){
-//                LOCATION_REFRESH_TIME_SECONDS = 5;
-//                AUDIO_DELAY = 10000;
-//                locationFar();
-//            } else {
-//                // log 'lost connection'
-//            }
-//        }
         if (distToDest <= ARRIVED_DISTANCE){
             endJourney();
         } else {
@@ -336,74 +314,49 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
         //Sets delay for audio to increase frequency of beep as destination nears
 
-        if (distToDest > (initDist*11)/12) {
-            AUDIO_DELAY = 9000;
-        } else if (distToDest > (initDist*10)/12 && distToDest <= (initDist*11)/12) {
-            AUDIO_DELAY = 8000;
-        } else if (distToDest > (initDist*9)/12 && distToDest <= (initDist*10)/12) {
-            AUDIO_DELAY = 8000;
-        } else if (distToDest > (initDist*8)/12 && distToDest <= (initDist*9)/12) {
-            AUDIO_DELAY = 7000;
-        } else if (distToDest > (initDist*7)/12 && distToDest <= (initDist*8)/12) {
-            AUDIO_DELAY = 6000;
-        } else if (distToDest > (initDist*6)/12 && distToDest <= (initDist*7)/12) {
-            AUDIO_DELAY = 5000;
-        } else if (distToDest > (initDist*5)/12 && distToDest <= (initDist*6)/12) {
-            AUDIO_DELAY = 4000;
-        } else if (distToDest > (initDist*4)/12 && distToDest <= (initDist*5)/12) {
-            AUDIO_DELAY = 3000;
-        } else if (distToDest > (initDist*3)/12 && distToDest <= (initDist*4)/12) {
-            AUDIO_DELAY = 2000;
-        } else if (distToDest > (initDist*2)/12 && distToDest <= (initDist*3)/12) {
-            AUDIO_DELAY = 1000;
-        } else if (distToDest > (initDist)/12 && distToDest <= (initDist*2)/12) {
-            AUDIO_DELAY = 500;
-        } else if (distToDest <= (initDist)/12) {
-            AUDIO_DELAY = 250;
-        }
-    }
-
-    private void locationClose() {
-
-        //Sets delay for audio to increase frequency of beep as destination nears
-
-        if (distToDest > (DESTINATION_CLOSE_METRES*4)/5 ){
-            AUDIO_DELAY = 5000;
-        } else if (distToDest <= (DESTINATION_CLOSE_METRES*4)/5 && distToDest > (DESTINATION_CLOSE_METRES*3)/5){
-            AUDIO_DELAY = 2500;
-        } else if (distToDest <= (DESTINATION_CLOSE_METRES*3)/5 && distToDest > (DESTINATION_CLOSE_METRES*2)/5){
-            AUDIO_DELAY = 1000;
-        } else if (distToDest <= (DESTINATION_CLOSE_METRES*2)/5 && distToDest > (DESTINATION_CLOSE_METRES)/5){
-            AUDIO_DELAY = 500;
-        } else {
-            AUDIO_DELAY = 250;
-        }
-
-        //Starts audio track if it is not already playing (if destination starts off 'close')
-        if (!isRunning){
-            playAudio();
-        }
-    }
-
-    private void locationFar() {
-
-        if(((distToDest + PROGRESS_TOLERANCE) <  prevDist) && prevDist != 0){
-            //if progress is being made on the journey keep playing audio
-            if (!isRunning){
-                playAudio();
+        if (initDist > DESTINATION_CLOSE_METRES) {
+            if (distToDest > (initDist * 1.5)) {
+                AUDIO_DELAY = 15000;
+            } else if (distToDest > initDist) {
+                AUDIO_DELAY = 10000;
+            } else if (distToDest > (initDist * 8) / 10 && distToDest <= (initDist * 10) / 10) {
+                AUDIO_DELAY = 8000;
+            } else if (distToDest > (initDist * 6) / 10 && distToDest <= (initDist * 8) / 10) {
+                AUDIO_DELAY = 6000;
+            } else if (distToDest > (initDist * 4) / 10 && distToDest <= (initDist * 6) / 10) {
+                AUDIO_DELAY = 4000;
+            } else if (distToDest > (initDist * 3) / 10 && distToDest <= (initDist * 4) / 10) {
+                AUDIO_DELAY = 2000;
+            } else if (distToDest > (initDist * 2) / 10 && distToDest <= (initDist * 3) / 10) {
+                AUDIO_DELAY = 1000;
+                LOCATION_REFRESH_TIME_SECONDS = 2;
+            } else if (distToDest > (initDist) / 10 && distToDest <= (initDist * 2) / 10) {
+                AUDIO_DELAY = 500;
+                LOCATION_REFRESH_TIME_SECONDS = 2;
+            } else if (distToDest <= (initDist) / 10) {
+                AUDIO_DELAY = 250;
+                LOCATION_REFRESH_TIME_SECONDS = 2;
             }
         } else {
-            //no progress made, pause audio
-            if (isRunning){
-                stopAudio();
+            if (distToDest > (DESTINATION_CLOSE_METRES*4)/5 ){
+                AUDIO_DELAY = 5000;
+            } else if (distToDest <= (DESTINATION_CLOSE_METRES*4)/5 && distToDest > (DESTINATION_CLOSE_METRES*3)/5){
+                AUDIO_DELAY = 2500;
+            } else if (distToDest <= (DESTINATION_CLOSE_METRES*3)/5 && distToDest > (DESTINATION_CLOSE_METRES*2)/5){
+                AUDIO_DELAY = 1000;
+                LOCATION_REFRESH_TIME_SECONDS = 2;
+            } else if (distToDest <= (DESTINATION_CLOSE_METRES*2)/5 && distToDest > (DESTINATION_CLOSE_METRES)/5){
+                AUDIO_DELAY = 500;
+                LOCATION_REFRESH_TIME_SECONDS = 2;
+            } else {
+                AUDIO_DELAY = 250;
+                LOCATION_REFRESH_TIME_SECONDS = 2;
             }
         }
     }
 
     private void playAudio(){
 
-        audioCounter++;
-        System.out.println("Audio thread" + audioCounter + "created");
         //Plays a single beeping sound
         r = new Runnable() {
             public void run() {
@@ -418,7 +371,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     }
 
     private void stopAudio(){
-        audioCounter = 0;
         //Stops the audio from playing
         h.removeCallbacks(r);
         isRunning = false;
@@ -516,11 +468,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     private class DistanceTask extends AsyncTask<Void,Void,Void> {
         protected Void doInBackground(Void... params) {
             try {
-
-                //Set distance from previous location to assess progress
-                if (distToDest != Integer.MAX_VALUE) {
-                    prevDist = distToDest;
-                }
                 //Set new distance from API call
                 distToDest = getDistance();
                 //Set initial distance if not already set
