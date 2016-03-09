@@ -53,9 +53,10 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     private Location mCurrentLocation;
     String destLat; //Latitude of destination
     String destLon; //Longitude of destination
-    int distToDest; //Distance to destination (meters)
-    int prevDist; //Distance to destination (meters) from previous location
+    int distToDest = Integer.MAX_VALUE; //Distance to destination (meters)
+    int prevDist = Integer.MAX_VALUE;; //Distance to destination (meters) from previous location
     String mLastUpdateTime; //Last time that location was updated
+    boolean arrived;
 
     //Logging & intent stuff
 
@@ -79,6 +80,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     TextView distanceTextView;
     TextView refreshTextView;
     TextView refreshTime;
+    TextView successTextView;
 
     //Labels
 
@@ -96,6 +98,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     static int DESTINATION_CLOSE_METRES = 1000; //How close the destination should be to be considered 'close'
     static int LOCATION_REFRESH_TIME_SECONDS = 5; //How often location gets refreshed
     static int PROGRESS_TOLERANCE = 5; //Tolerance of positioning in metres
+    static int ARRIVED_DISTANCE = 50; //How close the vehicle has to be to the destination before it is considered to have arrived
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -116,6 +119,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         distanceTextView = (TextView) findViewById(R.id.distance);
         refreshTextView = (TextView) findViewById(R.id.refreshTextView);
         refreshTime = (TextView) findViewById(R.id.refreshTime);
+        successTextView = (TextView) findViewById(R.id.successTextView);
 
         //Set labels for all text views in the activity
         cLatitudeLabel = getResources().getString(R.string.current_latitude);
@@ -140,6 +144,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         //Set initial variables
         mLastUpdateTime = "";
         isRunning = false;
+        arrived = false;
 
         //Get current location information
         //Set up new API client
@@ -190,19 +195,32 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     }
 
     private void updateUI() {
-        //Updates all text views in the UI
-        cLatTextView.setText(String.format("%s %f", cLatitudeLabel, mCurrentLocation.getLatitude()));
-        cLonTextView.setText(String.format("%s %f", cLongitudeLabel, mCurrentLocation.getLongitude()));
 
-        //Displays distance to destination when calculated
-        if (distToDest == 0){
-            distanceTextView.setText(String.format("%s %s", distanceLabel, "Calculating distance"));
+        if(!arrived) {
+            //Updates all text views in the UI
+            cLatTextView.setText(String.format("%s %f", cLatitudeLabel, mCurrentLocation.getLatitude()));
+            cLonTextView.setText(String.format("%s %f", cLongitudeLabel, mCurrentLocation.getLongitude()));
+
+            //Displays distance to destination when calculated
+            if (distToDest == Integer.MAX_VALUE) {
+                distanceTextView.setText(String.format("%s %s", distanceLabel, "Calculating distance"));
+            } else {
+                distanceTextView.setText(String.format("%s %s %s %s %s", distanceLabel, distToDest, "metres", "Previous Distance: ", prevDist));
+            }
+
+            refreshTextView.setText(String.format("%s %s", refreshLabel, mLastUpdateTime));
+            refreshTime.setText(String.format("%s %s %s %s %s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS, "Delay", AUDIO_DELAY, "Progress Made", isRunning));
         } else {
-            distanceTextView.setText(String.format("%s %s %s %s %s", distanceLabel, distToDest, "metres", "Previous Distance: ", prevDist));
+            cLatTextView.setText("");
+            cLonTextView.setText("");
+            dLatTextView.setText("");
+            dLonTextView.setText("");
+            dAddTextView.setText("");
+            distanceTextView.setText("");
+            refreshTextView.setText("");
+            refreshTime.setText("");
+            successTextView.setText(getResources().getString(R.string.success_message));
         }
-
-        refreshTextView.setText(String.format("%s %s", refreshLabel, mLastUpdateTime));
-        refreshTime.setText(String.format("%s %s %s %s %s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS, "Delay", AUDIO_DELAY, "Progress Made", isRunning));
     }
 
     @Override
@@ -278,11 +296,13 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         Log.d(TAG, location.toString());
 
         //Checking whether location is 'close' to destination or 'far'
-        if (distToDest < DESTINATION_CLOSE_METRES && distToDest!=0){
+        if (distToDest <= ARRIVED_DISTANCE){
+            endJourney();
+        } else if (distToDest < DESTINATION_CLOSE_METRES && distToDest>ARRIVED_DISTANCE){
             LOCATION_REFRESH_TIME_SECONDS = 2;
             locationClose();
         } else {
-            if (distToDest != 0){
+            if (distToDest != Integer.MAX_VALUE){
                 LOCATION_REFRESH_TIME_SECONDS = 5;
                 AUDIO_DELAY = 10000;
                 locationFar();
@@ -291,6 +311,13 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
             }
         }
         updateUI();
+    }
+
+    private void endJourney(){
+        arrived = true;
+        stopAudio();
+        LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
+        mGoogleApiClient.disconnect();
     }
 
     private void locationClose() {
@@ -317,14 +344,13 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
     private void locationFar() {
 
-        if(prevDist > (distToDest + PROGRESS_TOLERANCE) && prevDist != 0){
+        if(((distToDest + PROGRESS_TOLERANCE) <  prevDist) && prevDist != 0){
             //if progress is being made on the journey keep playing audio
             if (!isRunning){
                 playAudio();
             }
         } else {
             //no progress made, pause audio
-            System.out.println("No progress being made!");
             if (isRunning){
                 stopAudio();
             }
@@ -336,9 +362,9 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         //Plays a single beeping sound
         r = new Runnable() {
             public void run() {
-                isRunning = true;
                 toneGen1.startTone(ToneGenerator.TONE_CDMA_PIP, 150);
                 h.postDelayed(this, AUDIO_DELAY);
+                isRunning = true;
             }
         };
 
@@ -348,8 +374,8 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
     private void stopAudio(){
         //Stops the audio from playing
-        isRunning = false;
         h.removeCallbacks(r);
+        isRunning = false;
     }
 
     @Override
@@ -445,7 +471,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         protected Void doInBackground(Void... params) {
             try {
                 //Set distance from previous location to assess progress
-                if (distToDest != 0) {
+                if (distToDest != Integer.MAX_VALUE) {
                     prevDist = distToDest;
                 }
                 //Set new distance from API call
