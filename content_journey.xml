@@ -67,5 +67,11 @@
         android:id="@+id/refreshTextView"
         android:layout_below="@+id/distance" />
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/refreshTime"
+        android:layout_below="@+id/refreshTextView" />
+
 
 </RelativeLayout>
