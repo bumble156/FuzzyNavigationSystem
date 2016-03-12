@@ -52,36 +52,38 @@ public class Destination extends AppCompatActivity {
         String message = editText.getText().toString();
 
         if (Geocoder.isPresent()) {
-            //Searches for entered location
-            List<Address> addresses = geocoder.getFromLocationName(message, 1);
-            //Selects best match
-            Address address = addresses.get(0);
-            //Gets latitude and longitude of location
-            double latitude = address.getLatitude();
-            double longitude = address.getLongitude();
+            if (!message.equals("")) {
+                //Searches for entered location
+                List<Address> addresses = geocoder.getFromLocationName(message, 1);
+                //Selects best match
+                Address address = addresses.get(0);
+                //Gets latitude and longitude of location
+                double latitude = address.getLatitude();
+                double longitude = address.getLongitude();
 
-            //Generates full address of location
-            String add = "";
-            for (int i=0;i<=address.getMaxAddressLineIndex();i++){
-                if (i != 0){
-                    add += ", ";
+                //Generates full address of location
+                String add = "";
+                for (int i = 0; i <= address.getMaxAddressLineIndex(); i++) {
+                    if (i != 0) {
+                        add += ", ";
+                    }
+                    add += address.getAddressLine(i);
                 }
-                add += address.getAddressLine(i);
-            }
 
-            //Adds values to intent
-            String lat = String.valueOf(latitude);
-            String lon = String.valueOf(longitude);
-            intent.putExtra(EXTRA_ADD, add);
-            intent.putExtra(EXTRA_LAT, lat);
-            intent.putExtra(EXTRA_LON, lon);
+                //Adds values to intent
+                String lat = String.valueOf(latitude);
+                String lon = String.valueOf(longitude);
+                intent.putExtra(EXTRA_ADD, add);
+                intent.putExtra(EXTRA_LAT, lat);
+                intent.putExtra(EXTRA_LON, lon);
+
+                startActivity(intent);
+            } else {
+                Toast.makeText(getApplicationContext(), "No destination entered", Toast.LENGTH_LONG).show();
+            }
         } else {
             System.out.println("No geocoder");
         }
-
-        //Sends intent and moves to Journey page
-        startActivity(intent);
     }
 
 }
-
