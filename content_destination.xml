@@ -18,6 +18,7 @@
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:text="@string/destination_label"
         android:id="@+id/destinationLabel"
+        android:layout_marginTop="5dp"
         android:layout_alignParentTop="true"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true" />
@@ -26,18 +27,19 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:hint="@string/title_activity_destination"
-        android:layout_below="@+id/destinationLabel"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:layout_toStartOf="@+id/goButton"
+        android:layout_marginLeft="5dp"
         android:layout_toLeftOf="@+id/goButton"
-        android:layout_alignRight="@+id/textView"
-        android:layout_alignEnd="@+id/textView" />
+        android:layout_toStartOf="@+id/goButton"
+        android:layout_alignRight="@+id/alert"
+        android:layout_alignEnd="@+id/alert"
+        android:layout_toRightOf="@+id/destinationLabel"
+        android:layout_toEndOf="@+id/destinationLabel" />
 
     <Button
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="100dp"
+        android:layout_width="200dp"
         android:text="@string/go_label"
+        android:layout_marginTop="40dp"
         android:id="@+id/goButton"
         android:onClick="sendDestination"
         android:layout_below="@+id/edit_message"
@@ -48,8 +50,9 @@
         android:layout_height="wrap_content"
         android:textAppearance="?android:attr/textAppearanceLarge"
         android:text="@string/permissions"
-        android:id="@+id/textView"
-        android:layout_centerVertical="true"
+        android:id="@+id/alert"
+        android:layout_marginTop="40dp"
+        android:layout_below="@+id/goButton"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true" />
 
