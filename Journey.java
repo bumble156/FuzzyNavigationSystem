@@ -55,7 +55,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     String destLat; //Latitude of destination
     String destLon; //Longitude of destination
     int distToDest = Integer.MAX_VALUE; //Distance to destination (meters)
-    String mLastUpdateTime; //Last time that location was updated
     boolean arrived;
     int initDist = 0;
 
@@ -74,32 +73,21 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
 
     //TextViews
 
-    TextView cLatTextView;
-    TextView cLonTextView;
-    TextView dLatTextView;
-    TextView dLonTextView;
     TextView dAddTextView;
-    TextView distanceTextView;
-    TextView refreshTextView;
-    TextView refreshTime;
     TextView successTextView;
+
+    Button muteButton;
 
     //Labels
 
-    String cLatitudeLabel;
-    String cLongitudeLabel;
-    String dLatitudeLabel;
-    String dLongitudeLabel;
     String dAddressLabel;
-    String distanceLabel;
-    String refreshLabel;
 
     //Variables
 
     static int AUDIO_DELAY = 10000; //milliseconds
     static int DESTINATION_CLOSE_METRES = 1000; //How close the destination should be to be considered 'close'
     static int LOCATION_REFRESH_TIME_SECONDS = 5; //How often location gets refreshed
-    static int ARRIVED_DISTANCE = 50; //How close the vehicle has to be to the destination before it is considered to have arrived
+    static int ARRIVED_DISTANCE = 100; //How close the vehicle has to be to the destination before it is considered to have arrived
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -112,24 +100,15 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         //Find all text views in the activity
-        cLatTextView = (TextView) findViewById(R.id.cLatitude);
-        cLonTextView = (TextView) findViewById(R.id.cLongitude);
-        dLatTextView = (TextView) findViewById(R.id.dLatitude);
-        dLonTextView = (TextView) findViewById(R.id.dLongitude);
+
         dAddTextView = (TextView) findViewById(R.id.dAddress);
-        distanceTextView = (TextView) findViewById(R.id.distance);
-        refreshTextView = (TextView) findViewById(R.id.refreshTextView);
-        refreshTime = (TextView) findViewById(R.id.refreshTime);
         successTextView = (TextView) findViewById(R.id.successTextView);
 
+        muteButton = (Button) findViewById(R.id.muteButton);
+
         //Set labels for all text views in the activity
-        cLatitudeLabel = getResources().getString(R.string.current_latitude);
-        cLongitudeLabel = getResources().getString(R.string.current_longitude);
-        dLatitudeLabel = getResources().getString(R.string.destination_latitude);
-        dLongitudeLabel = getResources().getString(R.string.destination_longitude);
+
         dAddressLabel = getResources().getString(R.string.destination_address);
-        distanceLabel = getResources().getString(R.string.distance);
-        refreshLabel = getResources().getString(R.string.refresh_time);
 
         //Pass in destination information from intent
         Intent intent = getIntent();
@@ -138,12 +117,10 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         String destAdd = intent.getStringExtra(Destination.EXTRA_ADD);
 
         //Add destination information to activity once it has been found
-        dLatTextView.setText(String.format("%s %s", dLatitudeLabel, destLat));
-        dLonTextView.setText(String.format("%s %s", dLongitudeLabel, destLon));
+
         dAddTextView.setText(String.format("%s %s", dAddressLabel, destAdd));
 
         //Set initial variables
-        mLastUpdateTime = "";
         isRunning = false;
         arrived = false;
 
@@ -195,35 +172,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
                 mGoogleApiClient, mLocationRequest, this);
     }
 
-    private void updateUI() {
-
-        if(!arrived) {
-            //Updates all text views in the UI
-            cLatTextView.setText(String.format("%s %f", cLatitudeLabel, mCurrentLocation.getLatitude()));
-            cLonTextView.setText(String.format("%s %f", cLongitudeLabel, mCurrentLocation.getLongitude()));
-
-            //Displays distance to destination when calculated
-            if (distToDest == Integer.MAX_VALUE) {
-                distanceTextView.setText(String.format("%s %s", distanceLabel, "Calculating distance"));
-            } else {
-                distanceTextView.setText(String.format("%s %s %s %s %s", distanceLabel, distToDest, "metres", "Initial distance", initDist));
-            }
-
-            refreshTextView.setText(String.format("%s %s", refreshLabel, mLastUpdateTime));
-            refreshTime.setText(String.format("%s %s %s %s", "Refresh Time", LOCATION_REFRESH_TIME_SECONDS, "Delay", AUDIO_DELAY));
-        } else {
-            cLatTextView.setText("");
-            cLonTextView.setText("");
-            dLatTextView.setText("");
-            dLonTextView.setText("");
-            dAddTextView.setText("");
-            distanceTextView.setText("");
-            refreshTextView.setText("");
-            refreshTime.setText("");
-            successTextView.setText(getResources().getString(R.string.success_message));
-        }
-    }
-
     @Override
     protected void onStart() {
         super.onStart();
@@ -263,8 +211,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
             }
             //Gets initial location from phone
             mCurrentLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
-            mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
-            updateUI();
         }
 
         startLocationUpdates();
@@ -302,11 +248,15 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
             locationDelay();
         }
 
-        updateUI();
     }
 
     private void endJourney(){
         arrived = true;
+
+        muteButton.setVisibility(View.INVISIBLE);
+        dAddTextView.setText("");
+        successTextView.setText(getResources().getString(R.string.success_message));
+
         stopAudio();
         LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
         mGoogleApiClient.disconnect();
@@ -383,7 +333,6 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         try {
             //Setting current location
             mCurrentLocation = location;
-            mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
 
             //Starts another task to calculate new distance from destination using newly found location
             new DistanceTask().execute();
