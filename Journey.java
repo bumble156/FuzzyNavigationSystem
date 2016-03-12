@@ -19,6 +19,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.TextView;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -69,6 +70,7 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
     final Handler h = new Handler();
     Runnable r;
     boolean isRunning; //Whether the audio track is currently playing or not
+    //boolean muted = false;
 
     //TextViews
 
@@ -397,6 +399,14 @@ public class Journey extends AppCompatActivity implements GoogleApiClient.Connec
         stopAudio();
         Intent backToDest = new Intent(this, Destination.class);
         startActivity(backToDest);
+    }
+
+    public void mute(View view){
+        if (isRunning){
+            stopAudio();
+        } else {
+            playAudio();
+        }
     }
 
     private int getDistance() throws IOException {
