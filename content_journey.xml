@@ -16,17 +16,9 @@
     <Button
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Back"
+        android:text="@string/back_label"
         android:id="@+id/backButton"
         android:onClick="goBack"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentRight="true"
-        android:layout_alignParentEnd="true" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:id="@+id/cLatitude"
         android:layout_alignParentTop="true"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true" />
@@ -34,44 +26,39 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:id="@+id/cLongitude"
-        android:layout_below="@+id/cLatitude" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:id="@+id/dLatitude"
-        android:layout_below="@+id/cLongitude" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:id="@+id/dLongitude"
-        android:layout_below="@+id/dLatitude" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
         android:id="@+id/dAddress"
-        android:layout_below="@+id/dLongitude" />
+        android:layout_marginTop="15dp"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:layout_alignTop="@+id/backButton"
+        android:layout_toRightOf="@+id/backButton"
+        android:layout_toEndOf="@+id/backButton" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:id="@+id/distance"
-        android:layout_below="@+id/dAddress" />
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:id="@+id/successTextView"
+        android:layout_centerVertical="true"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true" />
 
-    <TextView
+    <ToggleButton
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:id="@+id/refreshTextView"
-        android:layout_below="@+id/distance" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:id="@+id/refreshTime"
-        android:layout_below="@+id/refreshTextView" />
-
+        android:id="@+id/muteButton"
+        android:textOff="@string/audio_button_unmuted"
+        android:textOn="@string/audio_button_muted"
+        android:onClick="mute"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="50dp"
+        android:layout_marginBottom="10dp"
+        android:layout_toEndOf="@+id/successTextView"
+        android:layout_toRightOf="@+id/successTextView"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_below="@+id/backButton" />
 
 </RelativeLayout>
+
